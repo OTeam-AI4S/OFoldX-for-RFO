@@ -105,6 +105,7 @@ class TestModelDocumentation:
                 "proteinmpnn",
                 {"ProteinMpnnModel", "ProteinMpnnProcessor", "ProteinMpnnPipeline", "ProteinMpnnDesignAndPackPipeline"},
             ),
+            ("boltzgen", {"BoltzGenPipeline", "diffusion_loss"}),
             ("membranempnn", {"MembraneMpnnPipeline", "ProteinMpnnInput", "ProteinMpnnOutput"}),
             ("protenix", {"ProtenixPipeline", "ProtenixTfgGuidance"}),
         ],
