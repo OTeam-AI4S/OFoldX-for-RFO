@@ -77,6 +77,46 @@ class RepositoryCustomPipeline(RepositoryScorePipeline):
 PIPELINES.register("test_repository_custom", pipeline=RepositoryCustomPipeline, model_architecture="test_repository")
 
 
+@pytest.mark.parametrize("sharded", [False, True])
+def test_converted_repository_carries_sources_and_agpl(tmp_path, repository_model, repository_processor, sharded):
+    source = tmp_path / "source"
+    source.mkdir()
+    if sharded:
+        checkpoint = source / "model.safetensors.index.json"
+        checkpoint.write_text(json.dumps({"weight_map": {"a": "part1.safetensors", "b": "part2.safetensors"}}))
+        (source / "part1.safetensors").write_bytes(b"source first shard")
+        (source / "part2.safetensors").write_bytes(b"source second shard")
+    else:
+        checkpoint = source / "weights.ckpt"
+        checkpoint.write_bytes(b"original checkpoint bytes")
+    destination = tmp_path / "converted"
+    pipeline = RepositoryPairedPipeline(model=repository_model, processor=repository_processor)
+    save_repository(
+        pipeline,
+        destination,
+        sources={"checkpoint": SourceCheckpoint(checkpoint, revision="source-commit")},
+        converter="ofoldx.models.proteinmpnn.convert.convert_proteinmpnn_checkpoint",
+        options={"variant": "test-selected-variant"},
+    )
+    record = json.loads((destination / "conversion.json").read_text())
+    assert record["license"] == "AGPL-3.0-or-later"
+    assert record["options"]["variant"] == "test-selected-variant"
+    assert record["sources"]["checkpoint"]["revision"] == "source-commit"
+    recorded = {item["name"]: item["sha256"] for item in record["sources"]["checkpoint"]["files"]}
+    assert recorded == {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in source.iterdir()}
+    assert (
+        record["initial_artifacts"]["model.json"]["sha256"]
+        == hashlib.sha256((destination / "model.json").read_bytes()).hexdigest()
+    )
+    card = (destination / "README.md").read_text()
+    assert "license: agpl-3.0" in card and "test-selected-variant" in card
+    assert "Justas Dauparas" in card and "conversion.json" in card
+    assert "GNU AFFERO GENERAL PUBLIC LICENSE" in (destination / "license.md").read_text()
+    assert "OFoldX" in (destination / "license-faq.md").read_text()
+    loaded = RepositoryPairedPipeline.from_pretrained(destination, backend="eager")
+    torch.testing.assert_close(loaded.model.weight, repository_model.weight)
+
+
 def test_conversion_preserves_user_documents_and_precedes_upload(
     tmp_path, repository_model, repository_processor, monkeypatch
 ):
