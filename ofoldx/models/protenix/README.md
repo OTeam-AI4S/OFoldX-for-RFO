@@ -174,6 +174,21 @@ Please use GitHub issues of [OFoldX](https://github.com/OTeam-AI4S/OFoldX/issues
 
 Please contact the authors of the [Protenix paper](https://doi.org/10.1101/2025.01.08.631967) for questions or comments on the paper/model.
 
+### Differentiable sequence optimization
+
+`ProtenixPipeline.optimization_forward(input, sequence_probabilities)` exposes
+raw predictions for sequence optimizers. Probabilities have shape
+`(batch, token, 20)` in `ACDEFGHIKLMNPQRSTVWY` order. Their soft residue features
+are used in the Protenix trunk and, when present, the ESM residue embeddings,
+so gradients reach the supplied sequence probabilities through the trunk and
+confidence heads.
+
+Coordinate diffusion runs without gradients in this method. Its sampled
+coordinates are held fixed while the confidence head computes PAE, PDE, pLDDT,
+and resolved logits. RFO can calculate its objective from these raw tensors and
+keep its sequence proposal, mutation, and acceptance logic. Ordinary `fold()`
+remains the inference API and returns decoded structures and metrics.
+
 ## License
 
 The model weights, implementation, configuration, and documentation distributed by OFoldX are licensed under the

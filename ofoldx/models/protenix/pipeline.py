@@ -245,6 +245,30 @@ class ProtenixPipeline(PairedPipeline[ProtenixModel, ProtenixProcessor]):
 
     __call__ = task_call(fold)
 
+    def optimization_forward(
+        self,
+        input: ProtenixInput,
+        sequence_probabilities: torch.Tensor,
+        *,
+        num_recycles: int | None = None,
+        num_sampling_steps: int | None = None,
+        generator: torch.Generator | None = None,
+    ) -> ProtenixSamplingOutput:
+        r"""Return raw Protenix predictions with gradients to soft protein sequences.
+
+        Unlike :meth:`fold`, this method does not decode a ``FoldResult`` or
+        disable gradients. Call :meth:`decode_fold` separately when a structure
+        artifact is needed after optimization.
+        """
+
+        return self.model.optimization_forward(
+            input,
+            sequence_probabilities,
+            num_recycles=num_recycles,
+            num_sampling_steps=num_sampling_steps,
+            generator=generator,
+        )
+
 
 class ProtenixStructureConditionPipeline(ProtenixPipeline):
     r"""

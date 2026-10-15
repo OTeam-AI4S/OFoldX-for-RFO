@@ -18,7 +18,7 @@ from torch import Tensor, nn
 from transformers import EsmConfig, EsmModel
 
 from ...data.molecular import AtomSite, ComponentRef
-from ...data.tokenization import TOKENS
+from ...data.tokenization import TOKENS, TOKEN_INDEX
 from ...errors import RequestRef, fail
 from ...metrics import (
     categorical_expectation,
@@ -85,6 +85,7 @@ from .config import (
     ProtenixTemplateModelConfig,
 )
 
+
 #: The upstream residue alphabet (``STD_RESIDUES_WITH_GAP``: 20 amino acids, UNK, RNA, DNA, gap) in canonical
 #: spelling; ``OTHER`` reads its ``X`` row, as upstream gives every per-atom ligand token UNK.
 PROTENIX_SOURCE_TOKENS = (*"ARNDCQEGHILKMFPSTWYVX", *(f"RNA_{x}" for x in "AGCUN"), *(f"DNA_{x}" for x in "AGCTN"), "-")
@@ -97,6 +98,43 @@ def protenix_source_map() -> Tensor:
     r"""``[32, 72]``: per canonical class (column), its coefficients on the upstream alphabet (``folding_source_map``
     read in ``PROTENIX_SOURCE_TOKENS`` order)."""
     return folding_source_map()[[FOLDING_SOURCE_TOKEN_INDEX[token] for token in PROTENIX_SOURCE_TOKENS]]
+
+# Atom-derived token state + target residue type + canonical MSA profile + deletion mean.
+
+_OPTIMIZATION_AA_ORDER = "ACDEFGHIKLMNPQRSTVWY"
+_OPTIMIZATION_ESM_TOKEN_IDS = (5, 23, 13, 9, 18, 6, 21, 12, 15, 4, 20, 17, 14, 16, 10, 8, 11, 7, 22, 19)
+
+def _soft_sequence_token_features(input: ProtenixInput, probabilities: Tensor) -> Tensor:
+    """Replace Protenix's discrete protein residue/profile features with soft inputs."""
+
+    token_features = input.token_features
+    token_vocab_start = 384
+    profile_start = token_vocab_start + len(TOKENS)
+    aa_indices = torch.tensor(
+        [TOKEN_INDEX[amino_acid] for amino_acid in _OPTIMIZATION_AA_ORDER],
+        device=token_features.device,
+        dtype=torch.long,
+    )
+    soft_token = token_features[..., token_vocab_start : profile_start].clone()
+    soft_profile = token_features[..., profile_start : profile_start + len(TOKENS)].clone()
+    protein_mask = input.token_has_esm
+    soft_token[..., aa_indices] = probabilities.to(soft_token.dtype)
+    soft_profile[..., aa_indices] = probabilities.to(soft_profile.dtype)
+    token_features = torch.cat(
+        (
+            token_features[..., :token_vocab_start],
+            torch.where(protein_mask.unsqueeze(-1), soft_token, token_features[..., token_vocab_start:profile_start]),
+            torch.where(
+                protein_mask.unsqueeze(-1),
+                soft_profile,
+                token_features[..., profile_start : profile_start + len(TOKENS)],
+            ),
+            token_features[..., profile_start + len(TOKENS) :],
+        ),
+        dim=-1,
+    )
+    return token_features
+
 
 
 class ProtenixModel(Model):
@@ -582,6 +620,74 @@ class ProtenixModel(Model):
         )
         return self._assemble_output(input, representations, coordinates)
 
+    def optimization_forward(
+        self,
+        input: ProtenixInput,
+        sequence_probabilities: Tensor,
+        *,
+        num_recycles: int | None = None,
+        num_sampling_steps: int | None = None,
+        generator: torch.Generator | None = None,
+    ) -> ProtenixSamplingOutput:
+        r"""Run a sequence-differentiable confidence pass for design optimization.
+
+        ``sequence_probabilities`` has shape ``(B, N, 20)`` in
+        ``ACDEFGHIKLMNPQRSTVWY`` order. The trunk and confidence heads retain
+        gradients to these probabilities. Coordinate diffusion runs without
+        gradients and its resulting coordinates are treated as fixed inputs
+        to the confidence head, matching the short confidence-gradient route
+        used by sequence optimizers.
+
+        This method is intentionally separate from :meth:`sample`, whose
+        inference contract is no-grad.
+        """
+
+        if self.training:
+            raise ValueError("Protenix optimization requires the model in eval mode")
+        if sequence_probabilities.shape != (*input.token_mask.shape, 20):
+            raise ValueError("sequence_probabilities must have shape (B, N, 20)")
+        if num_recycles is None:
+            num_recycles = self._num_recycles
+        if num_recycles < 1:
+            raise ValueError("num_recycles must be positive")
+        if num_sampling_steps is None:
+            num_sampling_steps = self._num_sampling_steps
+        if num_sampling_steps < 1:
+            raise ValueError("num_sampling_steps must be positive")
+
+        sequence_probabilities = sequence_probabilities.to(
+            device=input.token_features.device, dtype=input.token_features.dtype
+        )
+        if not torch.isfinite(sequence_probabilities).all():
+            raise ValueError("sequence_probabilities must be finite")
+        if torch.any(sequence_probabilities < 0):
+            raise ValueError("sequence_probabilities cannot be negative")
+
+        msa_indices = tuple(
+            self._sample_msa_indices(input.msa_tokens.shape[-2], input.msa_tokens.device, generator=generator)
+            for _ in range(num_recycles)
+        )
+        representations = self._run_trunk(
+            input,
+            num_recycles=num_recycles,
+            reference_positions=input.reference_positions,
+            msa_indices=msa_indices,
+            sequence_probabilities=sequence_probabilities,
+        )
+        with torch.no_grad():
+            coordinates = self._predict_coords(
+                input,
+                representations=representations,
+                reference_positions=input.reference_positions,
+                num_samples=1,
+                num_sampling_steps=num_sampling_steps,
+                churn_rate=0.0,
+                step_scale=None,
+                generator=generator,
+                tfg_potential=None,
+            )
+        return self._assemble_output(input, representations, coordinates.detach())
+
     def _assemble_output(
         self,
         input: ProtenixInput,
@@ -655,14 +761,18 @@ class ProtenixModel(Model):
         reference_positions: Tensor,
         msa_indices: tuple[Tensor, ...] | None = None,
         pair_recycling_dropout: float = 0.0,
+        sequence_probabilities: Tensor | None = None,
     ) -> _ProtenixTrunkOutput:
         r"""
         Embed the inputs and run the recycling trunk.
         """
 
+        token_features = input.token_features
+        if sequence_probabilities is not None:
+            token_features = _soft_sequence_token_features(input, sequence_probabilities)
         token_embedding = self.input_embeddings(
             input.atom_features,
-            token_features=input.token_features,
+            token_features=token_features,
             reference_positions=reference_positions,
             reference_charges=input.reference_charges,
             reference_mask=input.reference_mask,
@@ -677,7 +787,8 @@ class ProtenixModel(Model):
             ),
         )
         if self.esm_projection is not None:
-            token_embedding = token_embedding + self.esm_projection(self._esm_token_embedding(input))
+            esm_embedding = self._esm_token_embedding(input, sequence_probabilities=sequence_probabilities)
+            token_embedding = token_embedding + self.esm_projection(esm_embedding)
         single_init = self.single_init_projection(token_embedding)
         relative_features = generate_relative_position_features(
             residue_index=input.residue_index,
@@ -706,7 +817,9 @@ class ProtenixModel(Model):
             relative_features=relative_features,
         )
 
-    def _esm_token_embedding(self, input: ProtenixInput) -> Tensor:
+    def _esm_token_embedding(
+        self, input: ProtenixInput, *, sequence_probabilities: Tensor | None = None
+    ) -> Tensor:
         r"""
         Run the frozen ESM2 child and gather one residue representation per Protenix token.
         """
@@ -717,11 +830,37 @@ class ProtenixModel(Model):
             shape = (*input.token_features.shape[:-1], esm_encoder.config.hidden_size)
             return input.token_features.new_zeros(shape)
 
-        sequence_embedding = esm_encoder(
-            input.esm_tokens.reshape(batch_size * num_sequences, sequence_length),
-            attention_mask=input.esm_mask.reshape(batch_size * num_sequences, sequence_length),
-            return_dict=True,
-        ).last_hidden_state
+        if sequence_probabilities is None:
+            sequence_embedding = esm_encoder(
+                input.esm_tokens.reshape(batch_size * num_sequences, sequence_length),
+                attention_mask=input.esm_mask.reshape(batch_size * num_sequences, sequence_length),
+                return_dict=True,
+            ).last_hidden_state
+        else:
+            # Evaluate frozen ESM with expected residue embeddings at each
+            # aligned Protenix protein token. Special tokens remain unchanged.
+            esm_ids = input.esm_tokens.reshape(batch_size, num_sequences * sequence_length)
+            esm_input = esm_encoder.get_input_embeddings()(esm_ids)
+            esm_input = esm_input.reshape(batch_size, num_sequences * sequence_length, -1)
+            aa_esm_ids = torch.tensor(
+                _OPTIMIZATION_ESM_TOKEN_IDS,
+                device=esm_input.device,
+                dtype=torch.long,
+            )
+            aa_embedding = esm_encoder.get_input_embeddings().weight.index_select(0, aa_esm_ids)
+            expected = sequence_probabilities.to(aa_embedding.dtype) @ aa_embedding
+            gather_index = input.token_to_esm_residue.unsqueeze(-1).expand(-1, -1, expected.shape[-1])
+            sequence_expected = expected.gather(1, gather_index)
+            for batch_index in range(batch_size):
+                valid = input.token_has_esm[batch_index]
+                esm_input[batch_index, input.token_to_esm_residue[batch_index, valid]] = sequence_expected[
+                    batch_index, valid
+                ]
+            sequence_embedding = esm_encoder(
+                inputs_embeds=esm_input.reshape(batch_size * num_sequences, sequence_length, -1),
+                attention_mask=input.esm_mask.reshape(batch_size * num_sequences, sequence_length),
+                return_dict=True,
+            ).last_hidden_state
         sequence_embedding = sequence_embedding.reshape(
             batch_size,
             num_sequences * sequence_length,
