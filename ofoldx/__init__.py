@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from ._version import __version__ as __version__  # noqa: F401
     from ._version import version
+    from .chemistry import PolymerSequence
     from .data import MolecularSystem, Structure
     from .modules.backend import Backend
 
@@ -18,6 +19,7 @@ _EXPORTS = {
     "__version__": ("._version", "__version__"),
     "version": ("._version", "version"),
     "MolecularSystem": (".data", "MolecularSystem"),
+    "PolymerSequence": (".chemistry", "PolymerSequence"),
     "Structure": (".data", "Structure"),
     "Backend": (".modules.backend", "Backend"),
 }
