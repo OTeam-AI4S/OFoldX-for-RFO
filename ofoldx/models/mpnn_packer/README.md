@@ -54,8 +54,6 @@ The model file depends on the [`ofoldx`](https://ofoldx.valhalla.technology/) li
 pip install ofoldx
 ```
 
-Before reading a structure, set `OFOLDX_CCD_ARTIFACT` to an existing CCD artifact.
-
 ### Direct Use
 
 #### Side-Chain Packing
