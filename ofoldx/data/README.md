@@ -68,3 +68,14 @@ Invalid requests, unsupported representations, and insufficient placement inform
 - [I/O](../io/README.md): read, write, and persist structures.
 - [Chemistry](../chemistry/README.md): component definitions and construction recipes.
 - [Results](../results/README.md): structures and scores returned by model workflows.
+
+[ofoldx.data.assembly]: https://ofoldx.valhalla.technology/data/assembly/#ofoldx.data.assembly
+[ofoldx.data.editing]: https://ofoldx.valhalla.technology/data/editing/#ofoldx.data.editing
+[ofoldx.data.molecular.MolecularSystem]: https://ofoldx.valhalla.technology/data/molecular/#ofoldx.data.molecular.MolecularSystem
+[ofoldx.data.projection]: https://ofoldx.valhalla.technology/data/projection/#ofoldx.data.projection
+[ofoldx.data.schema]: https://ofoldx.valhalla.technology/data/schema/#ofoldx.data.schema
+[ofoldx.data.schema.ArrayRecord]: https://ofoldx.valhalla.technology/data/schema/#ofoldx.data.schema.ArrayRecord
+[ofoldx.data.stereo]: https://ofoldx.valhalla.technology/data/stereo/#ofoldx.data.stereo
+[ofoldx.data.structure.Structure]: https://ofoldx.valhalla.technology/data/structure/#ofoldx.data.structure.Structure
+[ofoldx.data.tokenization.TokenLayout]: https://ofoldx.valhalla.technology/data/tokenization/#ofoldx.data.tokenization.TokenLayout
+[ofoldx.errors]: https://ofoldx.valhalla.technology/reference/errors/#ofoldx.errors

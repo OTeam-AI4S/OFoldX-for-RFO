@@ -1,6 +1,6 @@
 import pytest
 
-from docs.generate_docs import ROOT, rewrite_readme_links
+from docs.gen_pages import ROOT, rewrite_readme_links
 
 
 class TestReadmeLinks:
@@ -17,6 +17,7 @@ class TestReadmeLinks:
             ("ofoldx/chemistry", "../chemistry/index.md"),
             ("ofoldx/msa", "../msa/index.md"),
             ("ofoldx/templates", "../templates/index.md"),
+            ("ofoldx/reference", "../reference-data/index.md"),
             ("docs", "https://github.com/OTeam-AI4S/OFoldX/tree/main/docs"),
             ("pyproject.toml", "https://github.com/OTeam-AI4S/OFoldX/blob/main/pyproject.toml"),
             ("https://example.org/guide", "https://example.org/guide"),

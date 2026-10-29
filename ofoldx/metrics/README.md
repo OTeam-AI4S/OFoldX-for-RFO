@@ -48,3 +48,10 @@ describes each reduction.
 - [Analysis](../analysis/README.md): matching, annotations, grouping, filtering, and ranking.
 - [Results](../results/README.md): retain units and molecular axes alongside scores.
 - [Modules](../modules/README.md): learned heads that produce confidence logits.
+
+[ofoldx.metrics.confidence]: https://ofoldx.valhalla.technology/metrics/confidence/#ofoldx.metrics.confidence
+[ofoldx.metrics.diversity]: https://ofoldx.valhalla.technology/metrics/diversity/#ofoldx.metrics.diversity
+[ofoldx.metrics.sequence]: https://ofoldx.valhalla.technology/metrics/sequence/#ofoldx.metrics.sequence
+[ofoldx.metrics.structure]: https://ofoldx.valhalla.technology/metrics/structure/#ofoldx.metrics.structure
+[ofoldx.metrics.tm]: https://ofoldx.valhalla.technology/metrics/tm/#ofoldx.metrics.tm
+[ofoldx.metrics.tm.predicted_tm_score]: https://ofoldx.valhalla.technology/metrics/tm/#ofoldx.metrics.tm.predicted_tm_score
