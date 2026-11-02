@@ -8,13 +8,22 @@ Use pretrained models to predict structures, design sequences and backbones,
 score candidates, and pack side chains for proteins, nucleic acids, ligands,
 and their complexes.
 
+> [!IMPORTANT]
+> This fork is maintained for integration with the standalone RFO project. Its
+> `rfo-integration` branch contains the OFoldX changes required by RFO. Install
+> this branch in the same Python environment as RFO; the PyPI release and the
+> upstream OFoldX `main` branch may not contain these integration changes.
+
 ## Get Started
 
-Install OFoldX from PyPI:
+Install the RFO-compatible OFoldX branch:
 
 ```shell
-pip install ofoldx
+pip install "git+https://github.com/OTeam-AI4S/OFoldX-for-RFO.git@rfo-integration"
 ```
+
+Activate the Python environment used by RFO before installing OFoldX. If you
+manage the environment with uv, use `uv pip install` with the same Git URL.
 
 Score a protein sequence with ProteinMPNN:
 
@@ -34,10 +43,11 @@ The result reports sequence negative log-likelihood in `nat/residue`. See the
 prediction, molecular design, scoring, and side-chain packing. See the
 [runner guide](ofoldx/runners) for training.
 
-Install the latest source version when you need unreleased changes:
+For general OFoldX use outside the RFO integration, install the upstream
+package from PyPI:
 
 ```shell
-pip install git+https://github.com/OTeam-AI4S/OFoldX
+pip install ofoldx
 ```
 
 ## Community

@@ -7,13 +7,20 @@ OFoldX 是用于生物分子结构预测与设计的 PyTorch 库。
 通过预训练模型，可以预测结构、设计序列和骨架、评价候选并预测侧链构象，
 处理蛋白质、核酸、配体及其复合物。
 
+> [!IMPORTANT]
+> 本 fork 专门维护与独立版 RFO 整合所需的 OFoldX 修改。`rfo-integration`
+> 分支包含 RFO 所需的兼容改动。请在安装 RFO 的同一个 Python 环境中安装此分支；
+> PyPI 发行版和上游 OFoldX 的 `main` 分支可能不包含这些改动。
+
 ## 快速开始
 
-从 PyPI 安装 OFoldX：
+安装与 RFO 兼容的 OFoldX 分支：
 
 ```shell
-pip install ofoldx
+pip install "git+https://github.com/OTeam-AI4S/OFoldX-for-RFO.git@rfo-integration"
 ```
+
+安装前请先激活 RFO 使用的 Python 环境。如果你用 uv 管理环境，也可以对相同的 Git URL 使用 `uv pip install`。
 
 使用 ProteinMPNN 对蛋白质序列评分：
 
@@ -32,10 +39,10 @@ print(nll.value, nll.unit)
 [模型](ofoldx/models)和 [pipeline](ofoldx/pipelines) 指南介绍结构预测、分子设计、评分与侧链构象预测。
 训练请参阅 [runner 指南](ofoldx/runners)。
 
-如果需要未发布的最新修改，可以从源代码安装：
+如果是独立于 RFO 的一般 OFoldX 使用场景，可以从 PyPI 安装上游发行版：
 
 ```shell
-pip install git+https://github.com/OTeam-AI4S/OFoldX
+pip install ofoldx
 ```
 
 ## 社区
